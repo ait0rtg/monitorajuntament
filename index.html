@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor Polític — Castell-Platja d'Aro</title>
+  <meta name="description" content="Sistema de Monitorització Política Municipal per al regidor de l'oposició de Castell d'Aro, Platja d'Aro i S'Agaró." />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0c0e14" />
+
+  <!-- Favicon SVG (inline data URI, eliminates 404) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z' fill='%234ade80' opacity='0.9'/%3E%3Cpath d='M9 12L11 14L15 10' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar" aria-label="Navegació principal">
+    <div class="sidebar__logo">
+      <div class="sidebar__logo-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z" fill="var(--color-accent-green)" opacity="0.9"/>
+          <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="sidebar__logo-text">
+        <span class="sidebar__app-name">Monitor Polític</span>
+        <span class="sidebar__app-sub">Castell-Platja d'Aro</span>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="sidebar__section-label">Operacions</div>
+      <ul class="sidebar__list" role="list">
+        <li>
+          <button id="nav-dashboard" class="sidebar__item sidebar__item--active" data-view="dashboard" aria-current="page">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" fill="currentColor"/>
+              <rect x="14" y="3" width="7" height="7" rx="1.5" fill="currentColor" opacity=".5"/>
+              <rect x="14" y="14" width="7" height="7" rx="1.5" fill="currentColor" opacity=".5"/>
+              <rect x="3" y="14" width="7" height="7" rx="1.5" fill="currentColor" opacity=".5"/>
+            </svg>
+            Dashboard
+          </button>
+        </li>
+        <li>
+          <button id="nav-novetats" class="sidebar__item" data-view="novetats">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="currentColor" opacity=".8"/>
+            </svg>
+            Novetats en Viu
+            <span class="sidebar__badge sidebar__badge--red" id="badge-urgent">0</span>
+          </button>
+        </li>
+        <li>
+          <button id="nav-seguiment" class="sidebar__item" data-view="seguiment">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+              <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Seguiment
+            <span class="sidebar__badge sidebar__badge--amber" id="badge-seguiment">0</span>
+          </button>
+        </li>
+        <li>
+          <button id="nav-recordatoris" class="sidebar__item" data-view="recordatoris">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Recordatoris
+          </button>
+        </li>
+      </ul>
+
+      <div class="sidebar__section-label">Fiscal·lització</div>
+      <ul class="sidebar__list" role="list">
+        <li>
+          <button id="nav-preguntes" class="sidebar__item" data-view="preguntes">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Preguntes de Ple
+            <span class="sidebar__badge sidebar__badge--amber" id="badge-preguntes">0</span>
+          </button>
+        </li>
+        <li>
+          <button id="nav-revisions" class="sidebar__item" data-view="revisions">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Revisió Manual
+            <span class="sidebar__badge sidebar__badge--red" id="badge-revisio">0</span>
+          </button>
+        </li>
+        <li>
+          <button id="nav-imports" class="sidebar__item" data-view="imports">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Imports Detectats
+          </button>
+        </li>
+        <li>
+          <button id="nav-fonts" class="sidebar__item" data-view="fonts">
+            <svg class="sidebar__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+              <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            Fonts
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="sidebar__footer">
+      <button class="sidebar__footer-btn" id="btn-config" title="Configuració Supabase">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M2 12h2M20 12h2M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Configuració
+      </button>
+      <button class="sidebar__footer-btn" id="btn-help">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Ajuda
+      </button>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN AREA ===================== -->
+  <main class="main" id="main-content">
+
+    <!-- TOP HEADER -->
+    <header class="topbar">
+      <div class="topbar__title">
+        <button class="topbar__menu-btn" id="btn-sidebar-toggle" aria-label="Obrir/tancar menú" aria-expanded="false" aria-controls="sidebar">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+            <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div>
+          <h1 class="topbar__heading" id="page-title">Dilluns, 20 d'Abril</h1>
+          <p class="topbar__subtitle" id="page-subtitle">Resum del dia · Última actualització: <span id="last-update">—</span></p>
+        </div>
+      </div>
+      <div class="topbar__right">
+        <div class="topbar__search" role="search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <input type="search" id="search-input" class="topbar__search-input" placeholder="Cercar registres..." aria-label="Cercar registres" />
+          <kbd class="topbar__kbd">⌘K</kbd>
+        </div>
+        <button class="topbar__icon-btn" id="btn-export-csv" title="Exportar a CSV" aria-label="Exportar dades a CSV">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="topbar__refresh-btn" id="btn-refresh" title="Actualitzar dades" aria-label="Actualitzar dades">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+            <polyline points="1 4 1 10 7 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3.51 15a9 9 0 1 0 .49-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="topbar__new-btn" id="btn-new-entry">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Nou registre
+        </button>
+        <span class="topbar__demo-badge" id="demo-mode-badge" aria-live="polite" title="Mode de demostració actiu — les dades no es guarden">DEMO</span>
+        <button class="topbar__theme-btn" id="btn-theme-toggle" title="Canviar aspecte Dia/Nit" aria-label="Canviar mode fosc/clar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" id="icon-theme">
+            <circle cx="12" cy="12" r="5" fill="none"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="4.22" x2="19.78" y2="5.64"/>
+          </svg>
+        </button>
+        <div class="topbar__avatar" id="topbar-avatar" aria-label="Regidor" title="Menú d'usuari" tabindex="0">R</div>
+      </div>
+    </header>
+
+    <!-- ============ VIEW: DASHBOARD ============ -->
+    <section class="view view--active" id="view-dashboard" aria-labelledby="page-title">
+
+      <!-- KPI CARDS -->
+      <div class="kpi-grid" role="list" aria-label="Indicadors clau">
+        <div class="kpi-card" id="kpi-total" role="listitem">
+          <div class="kpi-card__icon kpi-card__icon--blue">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="kpi-card__content">
+            <p class="kpi-card__label">Total Detectats</p>
+            <p class="kpi-card__value" id="kpi-total-value">—</p>
+          </div>
+          <div class="kpi-card__delta kpi-card__delta--positive" id="kpi-total-delta">—</div>
+        </div>
+
+        <div class="kpi-card" id="kpi-urgent" role="listitem">
+          <div class="kpi-card__icon kpi-card__icon--red">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="kpi-card__content">
+            <p class="kpi-card__label">URGENTS Actius</p>
+            <p class="kpi-card__value kpi-card__value--red" id="kpi-urgent-value">—</p>
+          </div>
+          <div class="kpi-card__delta kpi-card__delta--negative" id="kpi-urgent-delta">— pendents</div>
+        </div>
+
+        <div class="kpi-card" id="kpi-revisio" role="listitem">
+          <div class="kpi-card__icon kpi-card__icon--amber">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/>
+              <line x1="9" y1="15" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="kpi-card__content">
+            <p class="kpi-card__label">Revisió Manual</p>
+            <p class="kpi-card__value kpi-card__value--amber" id="kpi-revisio-value">—</p>
+          </div>
+          <div class="kpi-card__delta" id="kpi-revisio-delta">confiança baixa</div>
+        </div>
+
+        <div class="kpi-card" id="kpi-preguntes" role="listitem">
+          <div class="kpi-card__icon kpi-card__icon--blue">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="kpi-card__content">
+            <p class="kpi-card__label">Preguntes de Ple</p>
+            <p class="kpi-card__value" id="kpi-preguntes-value">—</p>
+          </div>
+          <div class="kpi-card__delta" id="kpi-preguntes-delta">suggerides per IA</div>
+        </div>
+
+        <div class="kpi-card" id="kpi-venciments" role="listitem">
+          <div class="kpi-card__icon kpi-card__icon--purple">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="kpi-card__content">
+            <p class="kpi-card__label">Venciments &lt;15 dies</p>
+            <p class="kpi-card__value kpi-card__value--red" id="kpi-venciments-value">—</p>
+          </div>
+          <div class="kpi-card__delta kpi-card__delta--negative" id="kpi-venciments-delta">— terminis legals</div>
+        </div>
+      </div>
+
+      <!-- MAIN GRID -->
+      <div class="dashboard-grid">
+
+        <!-- LIVE TABLE -->
+        <div class="card card--wide" id="card-live-table">
+          <div class="card__header">
+            <div class="card__header-left">
+              <div class="card__header-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+                  <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                  <path d="M12 8v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <h2 class="card__title">Novetats en Viu</h2>
+              <span class="card__badge" id="live-count-badge">0</span>
+            </div>
+            <div class="card__header-right">
+              <span class="card__meta" id="live-subtitle">darreres deteccions</span>
+              <button class="card__more-btn" aria-label="Més opcions">···</button>
+            </div>
+          </div>
+          <div class="table-wrapper" role="region" aria-label="Taula de novetats recents">
+            <table class="data-table" id="live-table">
+              <thead>
+                <tr>
+                  <th scope="col">Document / Títol</th>
+                  <th scope="col">Font</th>
+                  <th scope="col">Tema</th>
+                  <th scope="col">Classificació</th>
+                  <th scope="col">Estat</th>
+                  <th scope="col">Acció</th>
+                </tr>
+              </thead>
+              <tbody id="live-table-body">
+                <tr><td colspan="6" class="table-loading">Carregant dades...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ACTIVITY CHART -->
+        <div class="card" id="card-activity-chart">
+          <div class="card__header">
+            <div class="card__header-left">
+              <div class="card__header-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                  <polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h2 class="card__title">Activitat per Urgència</h2>
+            </div>
+            <button class="card__more-btn" aria-label="Més opcions">···</button>
+          </div>
+          <div class="chart-stats-row">
+            <div class="chart-stat">
+              <span class="chart-stat__value" id="stat-urgent-pct">—</span>
+              <span class="chart-stat__label">% Urgents</span>
+            </div>
+            <div class="chart-stat">
+              <span class="chart-stat__value" id="stat-total-today">—</span>
+              <span class="chart-stat__label">Total registres</span>
+            </div>
+            <div class="chart-stat">
+              <span class="chart-stat__value" id="stat-confianca">—</span>
+              <span class="chart-stat__label">% Alta confiança</span>
+            </div>
+          </div>
+          <div class="chart-container" role="img" aria-label="Gràfic de distribució per urgència">
+            <canvas id="urgency-chart" aria-hidden="true"></canvas>
+          </div>
+          <div class="chart-legend" id="chart-legend" aria-label="Llegenda del gràfic">
+            <span class="chart-legend__item"><span class="chart-legend__dot chart-legend__dot--red"></span>Urgent</span>
+            <span class="chart-legend__item"><span class="chart-legend__dot chart-legend__dot--amber"></span>Important</span>
+            <span class="chart-legend__item"><span class="chart-legend__dot chart-legend__dot--green"></span>Informatiu</span>
+          </div>
+        </div>
+
+        <!-- CALENDAR -->
+        <div class="card" id="card-calendar">
+          <div class="card__header">
+            <div class="card__header-left">
+              <div class="card__header-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </div>
+              <h2 class="card__title">Calendari de Venciments</h2>
+            </div>
+            <button class="card__more-btn" aria-label="Més opcions">···</button>
+          </div>
+          <div id="calendar-widget" class="calendar-widget" aria-label="Calendari d'Abril 2026"></div>
+        </div>
+
+        <!-- TASKS / PENDING -->
+        <div class="card" id="card-tasks">
+          <div class="card__header">
+            <div class="card__header-left">
+              <div class="card__header-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <h2 class="card__title">Tasques i Autoritzacions</h2>
+              <span class="card__badge card__badge--red" id="tasks-count-badge">0</span>
+            </div>
+            <button class="card__more-btn" aria-label="Més opcions">···</button>
+          </div>
+          <ul class="task-list" id="task-list" role="list" aria-label="Llista de tasques pendents">
+            <li class="task-list__loading">Carregant tasques...</li>
+          </ul>
+        </div>
+
+      </div><!-- end dashboard-grid -->
+    </section>
+
+    <!-- ============ VIEW: NOVETATS ============ -->
+    <section class="view" id="view-novetats" aria-label="Novetats en viu">
+      <div class="view-header">
+        <h2 class="view-header__title">Novetats en Viu</h2>
+        <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+          <div class="view-header__filters" role="group" aria-label="Filtres per classificació">
+            <button class="filter-btn filter-btn--active" data-filter="all" id="filter-all">Tots</button>
+            <button class="filter-btn filter-btn--red" data-filter="URGENT" id="filter-urgent">🔴 Urgents</button>
+            <button class="filter-btn filter-btn--amber" data-filter="IMPORTANT" id="filter-important">🟡 Importants</button>
+            <button class="filter-btn filter-btn--green" data-filter="INFORMATIU" id="filter-informatiu">🟢 Informatius</button>
+          </div>
+          <div class="date-range-filter" role="group" aria-label="Filtre per dates">
+            <label class="date-range-filter__label" for="filter-date-from">Des de</label>
+            <input type="date" id="filter-date-from" class="date-range-filter__input" aria-label="Data d'inici" />
+            <span class="date-range-filter__sep">—</span>
+            <label class="date-range-filter__label" for="filter-date-to">Fins a</label>
+            <input type="date" id="filter-date-to" class="date-range-filter__input" aria-label="Data fi" />
+            <button class="date-range-filter__clear" id="filter-date-clear" title="Esborrar filtre de dates" aria-label="Esborrar filtre de dates">✕</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrapper table-wrapper--full" role="region" aria-label="Tots els registres">
+        <table class="data-table" id="full-table">
+          <thead>
+            <tr>
+              <th scope="col">Data</th>
+              <th scope="col">Títol</th>
+              <th scope="col">Font</th>
+              <th scope="col">Tema</th>
+              <th scope="col">Classificació</th>
+              <th scope="col">Confiança</th>
+              <th scope="col">Import</th>
+              <th scope="col">Venciment</th>
+              <th scope="col">Estat</th>
+              <th scope="col">Accions</th>
+            </tr>
+          </thead>
+          <tbody id="full-table-body">
+            <tr><td colspan="10" class="table-loading">Carregant...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="full-table-footer"></div>
+    </section>
+
+    <!-- ============ VIEW: SEGUIMENT ============ -->
+    <section class="view" id="view-seguiment" aria-label="Seguiment de registres">
+      <div class="view-header">
+        <h2 class="view-header__title">Seguiment de Registres</h2>
+        <div class="view-header__filters" role="group" aria-label="Filtres per estat de seguiment">
+          <button class="filter-btn filter-btn--active" data-filter-seg="all" id="seg-filter-all">Tots</button>
+          <button class="filter-btn" data-filter-seg="pendent" id="seg-filter-pendent">Pendents</button>
+          <button class="filter-btn" data-filter-seg="en curs" id="seg-filter-encurs">En Curs</button>
+          <button class="filter-btn" data-filter-seg="tancat" id="seg-filter-tancat">Tancats</button>
+        </div>
+      </div>
+      <div id="seguiment-cards" class="seguiment-grid" role="list" aria-label="Registres de seguiment"></div>
+    </section>
+
+    <!-- ============ VIEW: RECORDATORIS ============ -->
+    <section class="view" id="view-recordatoris" aria-label="Recordatoris automàtics">
+      <div class="view-header">
+        <h2 class="view-header__title">Recordatoris Automàtics</h2>
+      </div>
+      <div class="recordatoris-group">
+        <h3 class="recordatoris-group__title">📅 Recordatoris a 30 dies</h3>
+        <ul id="rec-30" class="task-list task-list--standalone" role="list"></ul>
+      </div>
+      <div class="recordatoris-group">
+        <h3 class="recordatoris-group__title">📅 Recordatoris a 90 dies</h3>
+        <ul id="rec-90" class="task-list task-list--standalone" role="list"></ul>
+      </div>
+      <div class="recordatoris-group">
+        <h3 class="recordatoris-group__title">📅 Recordatoris a 180 dies</h3>
+        <ul id="rec-180" class="task-list task-list--standalone" role="list"></ul>
+      </div>
+    </section>
+
+    <!-- ============ VIEW: REVISIONS ============ -->
+    <section class="view" id="view-revisions" aria-label="Documents que requereixen revisió manual">
+      <div class="view-header">
+        <h2 class="view-header__title">Documents — Revisió Manual Requerida</h2>
+      </div>
+      <div id="revisions-list" class="seguiment-grid" role="list"></div>
+    </section>
+
+    <!-- ============ VIEW: IMPORTS ============ -->
+    <section class="view" id="view-imports" aria-label="Imports econòmics detectats">
+      <div class="view-header">
+        <h2 class="view-header__title">Imports Econòmics Detectats</h2>
+      </div>
+      <div class="imports-summary" id="imports-summary"></div>
+      <div class="table-wrapper table-wrapper--full">
+        <table class="data-table" id="imports-table">
+          <thead>
+            <tr>
+              <th scope="col">Data</th>
+              <th scope="col">Títol</th>
+              <th scope="col">Font</th>
+              <th scope="col">Import (€)</th>
+              <th scope="col">Tipus</th>
+              <th scope="col">Classificació</th>
+            </tr>
+          </thead>
+          <tbody id="imports-table-body">
+            <tr><td colspan="6" class="table-loading">Carregant...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ VIEW: PREGUNTES DE PLE ============ -->
+    <section class="view" id="view-preguntes" aria-label="Preguntes suggerides per al Ple municipal">
+      <div class="view-header">
+        <h2 class="view-header__title">Preguntes de Ple Suggerides</h2>
+        <div class="view-header__filters" role="group" aria-label="Filtres per estat">
+          <button class="filter-btn filter-btn--active" data-filter-preg="all" id="preg-filter-all">Totes</button>
+          <button class="filter-btn" data-filter-preg="pendent" id="preg-filter-pendent">Pendents</button>
+          <button class="filter-btn" data-filter-preg="presentada" id="preg-filter-presentada">Presentades</button>
+          <button class="filter-btn" data-filter-preg="tancada" id="preg-filter-tancada">Tancades</button>
+        </div>
+      </div>
+      <div class="preguntes-summary" id="preguntes-summary"></div>
+      <div class="preguntes-grid" id="preguntes-grid" role="list" aria-label="Llista de preguntes de ple"></div>
+    </section>
+
+    <!-- ============ VIEW: FONTS ============ -->
+    <section class="view" id="view-fonts" aria-label="Estat de les fonts monitoritzades">
+      <div class="view-header">
+        <h2 class="view-header__title">Fonts Monitoritzades</h2>
+      </div>
+      <div id="fonts-grid" class="fonts-grid" role="list"></div>
+    </section>
+
+  </main>
+
+  <!-- ===================== MODAL: DETAIL ===================== -->
+  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
+    <div class="modal" id="modal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="modal-title">Detall del Registre</h2>
+        <button class="modal__close" id="modal-close" aria-label="Tancar">&times;</button>
+      </div>
+      <div class="modal__body" id="modal-body"></div>
+      <div class="modal__footer">
+        <div class="modal__footer-left">
+          <label for="modal-estat" class="modal__label">Estat seguiment:</label>
+          <select id="modal-estat" class="modal__select">
+            <option value="pendent">Pendent</option>
+            <option value="en curs">En Curs</option>
+            <option value="tancat">Tancat</option>
+          </select>
+        </div>
+        <div class="modal__footer-right">
+          <button class="btn btn--secondary" id="modal-cancel">Cancel·lar</button>
+          <button class="btn btn--primary" id="modal-save">Guardar canvis</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: CONFIG ===================== -->
+  <div class="modal-overlay" id="config-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="config-modal-title" aria-hidden="true">
+    <div class="modal" id="config-modal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="config-modal-title">Configuració Supabase</h2>
+        <button class="modal__close" id="config-modal-close" aria-label="Tancar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <p class="config-info">Introdueix les credencials del teu projecte Supabase per connectar el dashboard a la base de dades real.</p>
+        <div class="form-group">
+          <label class="form-label" for="config-url">Supabase URL</label>
+          <input type="url" id="config-url" class="form-input" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="config-key">Anon Key (pública)</label>
+          <input type="password" id="config-key" class="form-input" placeholder="eyJhbGc..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <div class="config-status" id="config-status"></div>
+        </div>
+        <div class="config-note">
+          <strong>Nota:</strong> Les credencials es desen al localStorage del navegador. Per a ús en producció, configura variables d'entorn al servidor.
+        </div>
+      </div>
+      <div class="modal__footer">
+        <div class="modal__footer-right">
+          <button class="btn btn--secondary" id="config-test-btn">Provar connexió</button>
+          <button class="btn btn--primary" id="config-save-btn">Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: NOU REGISTRE ===================== -->
+  <div class="modal-overlay" id="nou-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="nou-modal-title" aria-hidden="true">
+    <div class="modal modal--wide" id="nou-modal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="nou-modal-title">➕ Nou Registre Manual</h2>
+        <button class="modal__close" id="nou-modal-close" aria-label="Tancar">&times;</button>
+      </div>
+      <div class="modal__body">
+        <p style="font-size:0.8125rem;color:var(--color-text-secondary);margin-bottom:1.25rem;">
+          Afegeix manualment un registre que el sistema automatitzat no hagi detectat.
+        </p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="nou-url">URL Original <span style="color:var(--color-accent-red)">*</span></label>
+            <input type="url" id="nou-url" class="form-input" placeholder="https://..." required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-titol">Títol del document <span style="color:var(--color-accent-red)">*</span></label>
+            <input type="text" id="nou-titol" class="form-input" placeholder="Acord de la Junta de Govern..." required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-font">Font</label>
+            <select id="nou-font" class="form-input modal__select">
+              <option value="Acords JGL">Acords JGL</option>
+              <option value="E-tauler">E-tauler</option>
+              <option value="Perfil Contractant">Perfil Contractant</option>
+              <option value="Altra font">Altra font</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-classificacio">Classificació</label>
+            <select id="nou-classificacio" class="form-input modal__select">
+              <option value="URGENT">🔴 URGENT</option>
+              <option value="IMPORTANT" selected>🟡 IMPORTANT</option>
+              <option value="INFORMATIU">🟢 INFORMATIU</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-tema">Tema principal</label>
+            <select id="nou-tema" class="form-input modal__select">
+              <option value="contractació">Contractació</option>
+              <option value="urbanisme">Urbanisme</option>
+              <option value="pressupost">Pressupost</option>
+              <option value="personal">Personal</option>
+              <option value="serveis">Serveis</option>
+              <option value="altres">Altres</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-tipus-doc">Tipus document</label>
+            <select id="nou-tipus-doc" class="form-input modal__select">
+              <option value="acord">Acord</option>
+              <option value="edicte">Edicte</option>
+              <option value="licitació">Licitació</option>
+              <option value="adjudicació">Adjudicació</option>
+              <option value="contracte">Contracte</option>
+              <option value="altres">Altres</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-import">Import detectat (€)</label>
+            <input type="number" id="nou-import" class="form-input" placeholder="0.00" min="0" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="nou-venciment">Data de venciment</label>
+            <input type="date" id="nou-venciment" class="form-input" />
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="nou-resum">Resum / Descripció <span style="color:var(--color-accent-red)">*</span></label>
+            <textarea id="nou-resum" class="form-input form-textarea" rows="4" placeholder="Descriu breument el contingut del document..." required></textarea>
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="nou-proposta">Proposta d'acció política</label>
+            <textarea id="nou-proposta" class="form-input form-textarea" rows="2" placeholder="Proposta d'acció concreta (opcional)..."></textarea>
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="nou-pregunta">Pregunta de ple suggerida</label>
+            <textarea id="nou-pregunta" class="form-input form-textarea" rows="2" placeholder="Pregunta per al ple (opcional)..."></textarea>
+          </div>
+          <div class="form-group form-group--full">
+            <label class="form-label" for="nou-observacions">Observacions</label>
+            <textarea id="nou-observacions" class="form-input form-textarea" rows="2" placeholder="Notes internes..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-check-label">
+              <input type="checkbox" id="nou-revisio-manual" />
+              <span>Requereix revisió manual</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <div class="modal__footer-right">
+          <button class="btn btn--secondary" id="nou-modal-cancel">Cancel·lar</button>
+          <button class="btn btn--primary" id="nou-modal-save">💾 Guardar registre</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== USER MENU ===================== -->
+  <div class="user-menu" id="user-menu" aria-hidden="true" role="menu">
+    <div class="user-menu__header">
+      <div class="user-menu__avatar">R</div>
+      <div>
+        <div class="user-menu__name">Regidor de l'Oposició</div>
+        <div class="user-menu__role" id="user-menu-email">Mode demostració</div>
+      </div>
+    </div>
+    <hr class="user-menu__divider" />
+    <button class="user-menu__item" id="user-menu-config" role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M2 12h2M20 12h2M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Configuració Supabase
+    </button>
+    <button class="user-menu__item" id="user-menu-export" role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Exportar CSV
+    </button>
+    <hr class="user-menu__divider" />
+    <button class="user-menu__item user-menu__item--danger" id="user-menu-logout" role="menuitem">
+      <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Tancar sessió
+    </button>
+  </div>
+
+  <!-- ===================== MODAL: AJUDA ===================== -->
+  <div class="modal-overlay" id="help-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" aria-hidden="true">
+    <div class="modal modal--wide" id="help-modal">
+      <div class="modal__header">
+        <h2 class="modal__title" id="help-modal-title">❓ Guia Ràpida — Monitor Polític</h2>
+        <button class="modal__close" id="help-modal-close" aria-label="Tancar ajuda">&times;</button>
+      </div>
+      <div class="modal__body" style="gap:var(--space-6);">
+
+        <div class="help-section">
+          <h3 class="help-section__title">📊 Dashboard Principal</h3>
+          <p class="help-section__text">El dashboard mostra els 5 KPIs clau, les últimes 10 novetats detectades automàticament, el gràfic de distribució per urgència i el calendari de venciments del mes.</p>
+        </div>
+
+        <div class="help-section">
+          <h3 class="help-section__title">🔴 Sistema de Classificació</h3>
+          <ul class="help-list">
+            <li><span class="badge badge--urgent">🔴 URGENT</span> — Contractació d'urgència, venciments &lt;15 dies o imports extraordinaris</li>
+            <li><span class="badge badge--important">🟡 IMPORTANT</span> — PDFs JGL, imports &gt;50.000€, temes de contractació pública</li>
+            <li><span class="badge badge--informatiu">🟢 INFORMATIU</span> — Informació general sense impacte polític immediat</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3 class="help-section__title">🏛️ Preguntes de Ple</h3>
+          <p class="help-section__text">La IA analitza automàticament cada document i suggereix preguntes per presentar al ple municipal. A la vista <strong>Preguntes de Ple</strong> pots copiar-les al portapapers, filtrar-les per estat i marcar-les com a presentades (canvia estat a «En Curs»).</p>
+        </div>
+
+        <div class="help-section">
+          <h3 class="help-section__title">🔗 Connexió Supabase</h3>
+          <p class="help-section__text">Fes clic a l'avatar <strong>R</strong> → <em>Configuració Supabase</em> per connectar el dashboard a la teva base de dades real. Necessites la <strong>Project URL</strong> i la <strong>Anon Key</strong> del teu projecte Supabase.</p>
+          <p class="help-section__text" style="color:var(--color-accent-amber);font-size:var(--font-size-xs);">⚠️ En mode demostració les dades no es guarden. Configura Supabase per persistència real.</p>
+        </div>
+
+        <div class="help-section">
+          <h3 class="help-section__title">⌨️ Dreceres de teclat</h3>
+          <ul class="help-list">
+            <li><kbd class="topbar__kbd">⌘K</kbd> / <kbd class="topbar__kbd">Ctrl+K</kbd> — Obrir cercador</li>
+            <li><kbd class="topbar__kbd">Esc</kbd> — Tancar modal/menú obert</li>
+          </ul>
+        </div>
+
+        <div class="help-section">
+          <h3 class="help-section__title">📤 Exportació de dades</h3>
+          <p class="help-section__text">Fes clic al botó de descàrrega (↓) a la barra superior per descarregar tots els registres en format <strong>CSV</strong> compatible amb Excel (inclou BOM UTF-8, preguntes de ple i propostes d'acció).</p>
+        </div>
+
+      </div>
+      <div class="modal__footer">
+        <div class="modal__footer-right">
+          <button class="btn btn--primary" id="help-modal-close-btn">Entès ✓</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TOAST ===================== -->
+  <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

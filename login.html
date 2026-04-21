@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accés — Monitor Polític</title>
+  <meta name="description" content="Accés al Sistema de Monitorització Política Municipal de Castell-Platja d'Aro." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #0c0e14;
+      color: #f0f2f8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Background glow */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 500px;
+      background: radial-gradient(ellipse at center, rgba(74,222,128,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -10%;
+      right: -10%;
+      width: 500px;
+      height: 400px;
+      background: radial-gradient(ellipse at center, rgba(96,165,250,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .login-card {
+      background: #161924;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 20px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+      position: relative;
+      z-index: 1;
+      animation: slideUp 400ms ease both;
+    }
+
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    .login-logo__icon {
+      width: 44px;
+      height: 44px;
+      background: rgba(74,222,128,0.12);
+      border: 1px solid rgba(74,222,128,0.25);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-logo__text { display: flex; flex-direction: column; }
+    .login-logo__name { font-size: 1rem; font-weight: 700; color: #f0f2f8; }
+    .login-logo__sub  { font-size: 0.75rem; color: #525c72; margin-top: 1px; }
+
+    h1.login-title {
+      font-size: 1.375rem;
+      font-weight: 700;
+      color: #f0f2f8;
+      margin-bottom: 0.375rem;
+    }
+    .login-subtitle {
+      font-size: 0.875rem;
+      color: #8891a8;
+      margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+    .form-label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #8891a8;
+      margin-bottom: 0.5rem;
+    }
+    .form-input {
+      width: 100%;
+      background: #1e2231;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      color: #f0f2f8;
+      padding: 0.75rem 1rem;
+      font-size: 0.9375rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .form-input:focus {
+      border-color: rgba(74,222,128,0.5);
+      box-shadow: 0 0 0 3px rgba(74,222,128,0.1);
+    }
+    .form-input::placeholder { color: #525c72; }
+
+    .form-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8125rem;
+      color: #8891a8;
+      cursor: pointer;
+    }
+    .form-check input[type="checkbox"] { accent-color: #4ade80; }
+    .form-link {
+      font-size: 0.8125rem;
+      color: #4ade80;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+      transition: color 150ms;
+    }
+    .form-link:hover { color: #22c55e; }
+
+    .btn-login {
+      width: 100%;
+      padding: 0.875rem;
+      background: #4ade80;
+      color: #0c0e14;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 150ms ease;
+      box-shadow: 0 4px 20px rgba(74,222,128,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .btn-login:hover:not(:disabled) {
+      background: #22c55e;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(74,222,128,0.4);
+    }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      color: #525c72;
+      font-size: 0.75rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255,255,255,0.07);
+    }
+
+    .btn-demo {
+      width: 100%;
+      padding: 0.75rem;
+      background: #1e2231;
+      color: #8891a8;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+    .btn-demo:hover {
+      border-color: rgba(74,222,128,0.4);
+      color: #4ade80;
+    }
+
+    .login-error {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(248,113,113,0.1);
+      border: 1px solid rgba(248,113,113,0.25);
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      color: #f87171;
+      display: none;
+    }
+    .login-error.visible { display: block; }
+
+    .login-success {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(74,222,128,0.1);
+      border: 1px solid rgba(74,222,128,0.25);
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      color: #4ade80;
+      display: none;
+    }
+    .login-success.visible { display: block; }
+
+    .login-footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      font-size: 0.75rem;
+      color: #525c72;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .config-section {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #1e2231;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .config-section__title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #525c72;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.75rem;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(12,14,20,0.3);
+      border-top-color: #0c0e14;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <main class="login-card" role="main">
+    <!-- Logo -->
+    <div class="login-logo">
+      <div class="login-logo__icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 7V12C3 16.55 6.84 20.74 12 22C17.16 20.74 21 16.55 21 12V7L12 2Z" fill="#4ade80" opacity="0.9"/>
+          <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="login-logo__text">
+        <span class="login-logo__name">Monitor Polític</span>
+        <span class="login-logo__sub">Castell-Platja d'Aro</span>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <h1 class="login-title">Accés al sistema</h1>
+    <p class="login-subtitle">Introdueix les teves credencials per accedir al dashboard de monitoratge municipal.</p>
+
+    <!-- Supabase config (shown if not configured) -->
+    <div class="config-section" id="supabase-config-section">
+      <div class="config-section__title">Connexió Supabase (primer accés)</div>
+      <div class="form-group">
+        <label class="form-label" for="login-supabase-url">Supabase Project URL</label>
+        <input type="url" id="login-supabase-url" class="form-input" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="login-supabase-key">Anon Key</label>
+        <input type="password" id="login-supabase-key" class="form-input" placeholder="eyJhbGc..." autocomplete="off" />
+      </div>
+    </div>
+
+    <!-- Login form -->
+    <form id="login-form" novalidate style="margin-top:1.5rem;">
+      <div class="form-group">
+        <label class="form-label" for="login-email">Correu electrònic</label>
+        <input
+          type="email"
+          id="login-email"
+          class="form-input"
+          placeholder="regidor@exemple.cat"
+          autocomplete="email"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-password">Contrasenya</label>
+        <input
+          type="password"
+          id="login-password"
+          class="form-input"
+          placeholder="••••••••"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <div class="form-row">
+        <label class="form-check">
+          <input type="checkbox" id="login-remember" />
+          Recorda'm
+        </label>
+        <button type="button" class="form-link" id="btn-forgot">Vaig oblidar la contrasenya</button>
+      </div>
+
+      <button type="submit" class="btn-login" id="btn-login">
+        Accedir al dashboard
+      </button>
+    </form>
+
+    <div class="login-error" id="login-error" role="alert"></div>
+    <div class="login-success" id="login-success" role="status"></div>
+
+    <div class="divider">o</div>
+
+    <button class="btn-demo" id="btn-demo-mode">
+      🎭 Continuar en mode demostració (sense BD)
+    </button>
+
+    <footer class="login-footer">
+      Sistema de Monitorització Política Municipal · v2.1<br/>
+      Ús intern · Regidor de l'Oposició · Castell-Platja d'Aro
+    </footer>
+  </main>
+
+  <script>
+    'use strict';
+
+    const SUPABASE_URL_KEY = 'mp_supabase_url';
+    const SUPABASE_KEY_KEY = 'mp_supabase_key';
+
+    // Pre-fill saved credentials
+    const savedUrl = localStorage.getItem(SUPABASE_URL_KEY) || '';
+    const savedKey = localStorage.getItem(SUPABASE_KEY_KEY) || '';
+    document.getElementById('login-supabase-url').value = savedUrl;
+    document.getElementById('login-supabase-key').value = savedKey;
+
+    // Hide config section if credentials already saved
+    if (savedUrl && savedKey) {
+      document.getElementById('supabase-config-section').style.display = 'none';
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('login-error');
+      el.textContent = msg;
+      el.classList.add('visible');
+      document.getElementById('login-success').classList.remove('visible');
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById('login-success');
+      el.textContent = msg;
+      el.classList.add('visible');
+      document.getElementById('login-error').classList.remove('visible');
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('btn-login');
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Accedint...';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = 'Accedir al dashboard';
+      }
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const url   = document.getElementById('login-supabase-url').value.trim() || savedUrl;
+      const key   = document.getElementById('login-supabase-key').value.trim() || savedKey;
+      const email = document.getElementById('login-email').value.trim();
+      const pass  = document.getElementById('login-password').value;
+
+      if (!url || !key) {
+        showError('Introdueix la URL i la clau del projecte Supabase.');
+        document.getElementById('supabase-config-section').style.display = 'block';
+        return;
+      }
+      if (!email || !pass) {
+        showError('Introdueix el correu i la contrasenya.');
+        return;
+      }
+
+      // Save credentials
+      localStorage.setItem(SUPABASE_URL_KEY, url);
+      localStorage.setItem(SUPABASE_KEY_KEY, key);
+
+      setLoading(true);
+      try {
+        const client = window.supabase.createClient(url, key);
+        const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
+
+        if (error) throw error;
+
+        showSuccess('✅ Accés correcte. Redirigint al dashboard...');
+        setTimeout(() => { window.location.href = 'index.html'; }, 1000);
+
+      } catch (err) {
+        showError(`Error d'accés: ${err.message}`);
+        setLoading(false);
+      }
+    });
+
+    // Demo mode — skip auth
+    document.getElementById('btn-demo-mode').addEventListener('click', () => {
+      sessionStorage.setItem('mp_demo_mode', '1');
+      window.location.href = 'index.html';
+    });
+
+    // Forgot password
+    document.getElementById('btn-forgot').addEventListener('click', async () => {
+      const email = document.getElementById('login-email').value.trim();
+      const url = localStorage.getItem(SUPABASE_URL_KEY);
+      const key = localStorage.getItem(SUPABASE_KEY_KEY);
+      if (!email) { showError('Introdueix el correu electrònic primer.'); return; }
+      if (!url || !key) { showError('Configura Supabase primer.'); return; }
+      try {
+        const client = window.supabase.createClient(url, key);
+        const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/index.html' });
+        if (error) throw error;
+        showSuccess(`Correu de recuperació enviat a ${email}.`);
+      } catch (err) {
+        showError(`Error: ${err.message}`);
+      }
+    });
+  </script>
+</body>
+</html>
