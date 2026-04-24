@@ -1,0 +1,486 @@
+{
+  "name": "Monitor Polític Municipal — Automatització Completa v2.1",
+  "nodes": [
+    {
+      "id": "node-001",
+      "name": "Trigger Diari 8h i 20h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 380],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * *" },
+            { "field": "cronExpression", "expression": "0 20 * * *" }
+          ]
+        },
+        "timezone": "Europe/Madrid"
+      }
+    },
+    {
+      "id": "node-002",
+      "name": "HTTP - Acords JGL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://ciutada.platjadaro.com/ajuntament/organitzacio-municipal/junta-de-govern/acords-de-junta-de-govern/",
+        "responseFormat": "text",
+        "options": { "timeout": 30000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-003",
+      "name": "HTTP - E-tauler API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 380],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://tauler.seu-e.cat/api/edictes?ens=1704860009",
+        "responseFormat": "json",
+        "options": { "timeout": 30000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-004",
+      "name": "HTTP - OpenData Contractació",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 560],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://analisi.transparenciacatalunya.cat/resource/l9x8-c5ya.json?$where=organ_contractacio%20like%20'%25Platja%25Aro%25'&$limit=200",
+        "responseFormat": "json",
+        "options": { "timeout": 30000 },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-005",
+      "name": "Merge - Espera 3 fonts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [680, 380],
+      "parameters": {
+        "mode": "waitForAll",
+        "number": 3
+      }
+    },
+    {
+      "id": "node-006",
+      "name": "Code - Extreu tots els links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 380],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "/* Extreu tots els links rellevants utilitzant lògica nativa JSON/API per a Tauler i Contractació, i Regex massiu per HTML */\n\nconst FONTS = [\n  {\n    nom: 'Acords JGL',\n    baseUrl: 'https://ciutada.platjadaro.com',\n  },\n  {\n    nom: 'E-tauler',\n    baseUrl: 'https://tauler.seu-e.cat',\n  },\n  {\n    nom: 'Perfil Contractant',\n    baseUrl: 'https://contractaciopublica.cat',\n  },\n];\n\nconst resultats = [];\nconst urlsVistes = new Set();\n\n// 1. Acords JGL (HTML Scrape agressiu per a PDFs de Junta)\nconst htmlJunta = items[0]?.json?.data || items[0]?.json?.body || '';\nif (htmlJunta && typeof htmlJunta === 'string') {\n  // Buscar qualsevol href que sigui un PDF a wp-content\n  const hrefPattern = /href=[\"']([^\"'\\s]+\\/wp-content\\/uploads\\/(2025|2026)\\/[^\"'\\s]+\\.pdf)[\"']/gi;\n  let match;\n  while ((match = hrefPattern.exec(htmlJunta)) !== null) {\n    let url = match[1].trim();\n    if (url.startsWith('//')) url = 'https:' + url;\n    if (url.startsWith('/')) url = FONTS[0].baseUrl + url;\n    if (urlsVistes.has(url)) continue;\n    urlsVistes.add(url);\n    resultats.push({\n      json: {\n        url_original: url,\n        font: FONTS[0].nom,\n        tipus: 'PDF',\n        titol_api: url.split('/').pop().replace('.pdf', ''),\n        descripcio_api: ''\n      }\n    });\n  }\n}\n\n// 2. E-Tauler (API JSON)\nconst jsonTauler = items[1]?.json?.edictes || [];\nif (Array.isArray(jsonTauler)) {\n  for (const edicte of jsonTauler) {\n    const url = `https://tauler.seu-e.cat/inici?idEns=1704860009&edicte=${edicte.id_edicte}`;\n    if (urlsVistes.has(url)) continue;\n    urlsVistes.add(url);\n    resultats.push({\n      json: {\n        url_original: url,\n        font: FONTS[1].nom,\n        tipus: 'edicte',\n        titol_api: edicte.titol,\n        descripcio_api: edicte.descripcio || ''\n      }\n    });\n  }\n}\n\n// 3. Contractació Open Data (API JSON array)\nconst jsonContractacio = items[2]?.json || [];\nif (Array.isArray(jsonContractacio)) {\n  for (const contracte of jsonContractacio) {\n    const url = contracte.enllac_al_perfil_del_contractant || contracte.link || `https://contractaciopublica.cat/ca/perfils-contractant/detall/3156875?expedient=${contracte.codi_expedient || ''}`;\n    if (urlsVistes.has(url) || !url.startsWith('http')) continue;\n    urlsVistes.add(url);\n    resultats.push({\n      json: {\n        url_original: url,\n        font: FONTS[2].nom,\n        tipus: 'licitació',\n        titol_api: contracte.denominacio_de_l_acord || contracte.objecte_del_contracte || contracte.titol || 'Contracte de Platja d\\'Aro',\n        descripcio_api: `Expedient: ${contracte.codi_expedient || '-'}. Import: ${contracte.pressupost_de_licitacio || '-'} €. Adjudicatari: ${contracte.adjudicatari || 'Pendent'}.`\n      }\n    });\n  }\n}\n\nconsole.log(`[INFO] Total URLs candidates trobades: ${resultats.length}`);\nreturn resultats.length > 0 ? resultats : [{ json: { _cap_url: true } }];"
+    }
+    },
+    {
+      "id": "node-007",
+      "name": "HTTP - Obte URLs existents (Supabase)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 380],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/monitoratge?select=url_original&limit=10000",
+        "responseFormat": "json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-008",
+      "name": "Code - Filtra URLs noves",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 380],
+      "parameters": {
+        "jsCode": "/* NOTA: Aquest node rep la resposta de Supabase com a $input.\n   Accedeix als URLs extrets del node anterior via $('Code - Extreu tots els links').all()\n   Filtra i retorna NOMÉS les URLs que no s'han processat mai. */\n\n// 1. Obtenir URLs ja registrades a Supabase\nconst supabaseResponse = $input.all();\nconst urlsJaProcessades = new Set();\n\nfor (const item of supabaseResponse) {\n  const data = item.json;\n  // La resposta de Supabase pot ser un array directe o via { data: [] }\n  const registres = Array.isArray(data) ? data : (data?.data || []);\n  for (const r of registres) {\n    if (r?.url_original) urlsJaProcessades.add(r.url_original);\n  }\n}\n\nconsole.log(`[INFO] URLs ja processades a Supabase: ${urlsJaProcessades.size}`);\n\n// 2. Obtenir URLs candidates del node d'extracció\nlet urlsCandidates;\ntry {\n  urlsCandidates = $('Code - Extreu tots els links').all();\n} catch (e) {\n  console.error('[ERROR] No es pot accedir als resultats del node extracció:', e.message);\n  return [];\n}\n\n// 3. Filtrar les noves\nconst noves = urlsCandidates.filter(item => {\n  const url = item.json?.url_original;\n  if (!url || item.json?._cap_url) return false;\n  return !urlsJaProcessades.has(url);\n});\n\nconsole.log(`[INFO] URLs candidates: ${urlsCandidates.length} | Noves a processar: ${noves.length}`);\n\nif (noves.length === 0) {\n  console.log('[INFO] Cap novetat detectada en aquesta execució.');\n  return [{ json: { _cap_novetat: true, total: 0 } }];\n}\n\n// Retornar màxim 20 per execució per evitar timeout\nconst limit = 20;\nconst novasFiltrades = noves.slice(0, limit);\nif (noves.length > limit) {\n  console.log(`[WARN] ${noves.length} URLs noves. Processant les primeres ${limit}.`);\n}\n\nreturn novasFiltrades;"
+      }
+    },
+    {
+      "id": "node-009",
+      "name": "IF - Hi ha novetats?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1640, 380],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json._cap_novetat }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notEqual" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-010",
+      "name": "Loop - Processa cada URL",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1880, 260],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "node-011",
+      "name": "HTTP - Fetch contingut complet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2120, 160],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url_original }}",
+        "responseFormat": "text",
+        "options": {
+          "timeout": 30000,
+          "response": { "response": { "fullResponse": true } }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36" },
+            { "name": "Accept", "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-012",
+      "name": "Code - Prepara contingut per a IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2360, 160],
+      "parameters": {
+        "jsCode": "/* Extreu el text llegible del HTML/PDF i prepara les metadades per OpenAI */\n\nconst httpResponse  = $input.item.json;\nconst loopItem      = $('Loop - Processa cada URL').item.json;\n\nconst statusCode    = httpResponse?.statusCode || 200;\nconst rawBody       = httpResponse?.data || httpResponse?.body || '';\nconst urlOriginal   = loopItem.url_original;\nconst font          = loopItem.font;\nconst tipus         = loopItem.tipus;\n\nlet textExtret         = '';\nlet confiancaBase      = 'ALTA';\nlet requereixRevisio   = false;\n\nif (statusCode >= 400 || !rawBody) {\n  textExtret       = `Error HTTP ${statusCode}. No s'ha pogut obtenir el contingut de la URL.`;\n  confiancaBase    = 'BAIXA';\n  requereixRevisio = true;\n\n} else if (tipus === 'PDF' || urlOriginal.toLowerCase().includes('.pdf')) {\n  // PDF textual: extreure text pla\n  const textRaw = typeof rawBody === 'string' ? rawBody.replace(/\\s+/g, ' ').trim() : '';\n  if (textRaw.length < 80) {\n    textExtret       = `PDF escanejat o protegit. Nom del fitxer: ${urlOriginal.split('/').pop()}`;\n    confiancaBase    = 'BAIXA';\n    requereixRevisio = true;\n  } else {\n    textExtret = textRaw.slice(0, 10000);\n  }\n\n} else {\n  // HTML: netejar i extreure text principal\n  let textNet = rawBody\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<nav[\\s\\S]*?<\\/nav>/gi, ' ')\n    .replace(/<footer[\\s\\S]*?<\\/footer>/gi, ' ')\n    .replace(/<header[\\s\\S]*?<\\/header>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"')\n    .replace(/&#[0-9]+;/g, ' ').replace(/\\s{2,}/g, ' ').trim();\n\n  if (textNet.length < 80) {\n    confiancaBase = 'MITJA';\n    textExtret    = `Contingut HTML insuficient (possible pàgina renderitzada per JS). URL: ${urlOriginal}`;\n  } else {\n    textExtret = textNet.slice(0, 8000);\n  }\n}\n\n// Injectar dades de les APIs rescatades\nif (loopItem.descripcio_api) {\n  textExtret = `\\n[INFORMACIÓ API DE LA FONT]:\\n${loopItem.descripcio_api}\\n\\n[TEXT RASPATEJAT]:\\n${textExtret}`;\n  if (confiancaBase === 'BAIXA') confiancaBase = 'MITJA';\n}\n\nconst titolFinal = loopItem.titol_api || decodeURIComponent(urlOriginal.split('/').pop().replace(/[?#].*$/, '').replace(/[-_]/g, ' ').replace(/\\.pdf$/i, '').trim()) || urlOriginal;\n\nreturn {\n  json: {\n    url_original:          urlOriginal,\n    font:                  font,\n    tipus:                 tipus,\n    titol_provisional:     titolFinal.slice(0, 300),\n    contingut_complet:     textExtret,\n    confianca_base:        confiancaBase,\n    requereix_revisio:     requereixRevisio,\n  }\n};"
+      }
+    },
+    {
+      "id": "node-013",
+      "name": "OpenAI - Analitza i classifica",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.5,
+      "position": [2600, 160],
+      "continueOnFail": true,
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list", "cachedResultName": "gpt-4o-mini" },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Ets l'assistent analític d'un regidor de l'oposició de Castell-Platja d'Aro (Catalunya, Espanya).\n\nNORMES FONAMENTALS:\n1. Basa't EXCLUSIVAMENT en el text proporcionat.\n2. NO inventis ni assumeixis informació que no sigui al text.\n3. Si el contingut és insuficient o il·legible, indica-ho explícitament.\n4. Respon SEMPRE en català.\n5. Respon EXCLUSIVAMENT en el format indicat, sense cap explicació addicional.\n6. Les dates han de ser en format DD/MM/YYYY."
+            },
+            {
+              "role": "user",
+              "content": "=FONT: {{ $json.font }}\nTIPUS: {{ $json.tipus }}\nTÍTOL PROVISIONAL: {{ $json.titol_provisional }}\nURL: {{ $json.url_original }}\n\nTEXT COMPLET DEL DOCUMENT / API:\n------\n{{ $json.contingut_complet }}\n------\n\nAnalitza el document exhaustivament i respon en EXACTAMENT aquest format (una línia per camp, excepte a RESUM on pots usar salts de línia, SENSE afegir explicacions fora del format):\n\nTÍTOL: [títol clar i descriptiu, màxim 120 caràcters]\nURGÈNCIA: [URGENT | IMPORTANT | INFORMATIU]\nRESUM: [Resum executiu exhaustiu i detallat en català. Fes servir bullets per desgranar punts clau de l'acord/edicte. Mínim 3 paràgrafs ben explicats. Analitza en profunditat el que s'hi destil·la.]\nVENCIMENT: [DD/MM/YYYY | No detectat]\nIMPORT: [número sense símbols ni punts de milers, o No detectat]\nTEMA: [urbanisme | contractació | personal | serveis | pressupost | altres]\nCONFIANÇA: [ALTA | MITJA | BAIXA]\nPER_OPOSICIO: [una frase de lectura política basada en fets del text]\nPROPOSTA: [proposta d'acció política concreta, o No aplicable]\nPREGUNTA_PLE: [pregunta concreta per presentar al ple municipal, o No aplicable]\nEXPEDIENT: [Sí — motiu breu | No]"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1500
+        }
+      },
+      "credentials": {
+        "openAiApi": { "id": "OPENAI_CREDENTIAL_ID", "name": "OpenAI API" }
+      }
+    },
+    {
+      "id": "node-014",
+      "name": "Code - Parseja IA i aplica regles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2840, 160],
+      "parameters": {
+        "jsCode": "/* Parseja la resposta de la IA i aplica les REGLES FIXES d'urgència (DER §5.2).\n   Les regles fixes tenen PRIORITAT MÀXIMA sobre la classificació de la IA. */\n\n// Obtenir la resposta de la IA\nconst iaText = $input.item.json?.message?.content\n  || $input.item.json?.choices?.[0]?.message?.content\n  || '';\n\n// Dades originals del node de preparació\nconst original = $('Code - Prepara contingut per a IA').item.json;\n\n// ─── Parser del format de resposta ───────────────────────────────────────\nfunction camp(text, clau) {\n  const regex = new RegExp(`^${clau}:\\\\s*(.+)$`, 'mi');\n  const m = text.match(regex);\n  return m ? m[1].trim() : null;\n}\n\nfunction parseImport(str) {\n  if (!str || /no detectat/i.test(str) || /no aplicable/i.test(str)) return null;\n  // Eliminar símbols i convertir coma decimal\n  const net = str.replace(/[€$£\\s.]/g, '').replace(',', '.');\n  const val = parseFloat(net);\n  return isNaN(val) || val <= 0 ? null : val;\n}\n\nfunction parseData(str) {\n  if (!str || /no detectat/i.test(str)) return null;\n  // Format DD/MM/YYYY → YYYY-MM-DD\n  const m = str.match(/(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})/);\n  if (!m) return null;\n  const [, d, mo, y] = m;\n  // Validar data\n  const dt = new Date(`${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`);\n  if (isNaN(dt.getTime())) return null;\n  return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;\n}\n\nfunction parseBoolean(str) {\n  if (!str) return false;\n  return /^sí/i.test(str.trim());\n}\n\n// ─── Extreure camps ───────────────────────────────────────────────────────\nconst titolIA        = camp(iaText, 'TÍTOL') || camp(iaText, 'TITOL') || original.titol_provisional;\nconst urgenciaIA     = camp(iaText, 'URGÈNCIA') || camp(iaText, 'URGENCIA') || 'INFORMATIU';\nconst resumIA        = camp(iaText, 'RESUM') || camp(iaText, 'RESUm') || 'Resum no disponible.';\nconst vencimentStr   = camp(iaText, 'VENCIMENT');\nconst importStr      = camp(iaText, 'IMPORT');\nconst temaIA         = camp(iaText, 'TEMA') || 'altres';\nconst confiancaIA    = camp(iaText, 'CONFIANÇA') || camp(iaText, 'CONFIANCA') || 'MITJA';\nconst propostaIA     = camp(iaText, 'PROPOSTA');\nconst preguntaIA     = camp(iaText, 'PREGUNTA_PLE') || camp(iaText, 'PREGUNTA PLE');\nconst expedientStr   = camp(iaText, 'EXPEDIENT');\n\nconst venciment      = parseData(vencimentStr);\nconst importDetectat = parseImport(importStr);\nconst calExpedient   = parseBoolean(expedientStr);\n\n// Neteja de valors \"No aplicable\"\nconst proposta = (propostaIA && !/no aplicable/i.test(propostaIA)) ? propostaIA : null;\nconst pregunta = (preguntaIA && !/no aplicable/i.test(preguntaIA)) ? preguntaIA : null;\n\n// ─── REGLES FIXES D'URGÈNCIA (DER §5.2) — Prioritat sobre IA ─────────────\nlet classificacio    = urgenciaIA.toUpperCase();\nif (!['URGENT','IMPORTANT','INFORMATIU'].includes(classificacio)) classificacio = 'INFORMATIU';\n\nlet reglaActivada    = null;\nconst avui           = new Date();\navui.setHours(0, 0, 0, 0);\n\n// Regla 1: Venciment legal pròxim (<15 dies) → URGENT obligatori\nif (venciment) {\n  const diesRestants = Math.ceil((new Date(venciment) - avui) / 86_400_000);\n  if (diesRestants > 0 && diesRestants < 15) {\n    classificacio = 'URGENT';\n    reglaActivada = `Venciment en ${diesRestants} dies`;\n  }\n}\n\n// Regla 2: Import > 50.000€ → mínim IMPORTANT\nif (importDetectat && importDetectat > 50_000 && classificacio === 'INFORMATIU') {\n  classificacio = 'IMPORTANT';\n  reglaActivada = `Import ${importDetectat.toLocaleString('ca-ES')} € > 50.000€`;\n}\n\n// Regla 3: Tema contractació → mínim IMPORTANT\nconst esContractacio = ['contractació','licitació','adjudicació'].includes(temaIA.toLowerCase());\nif (esContractacio && classificacio === 'INFORMATIU') {\n  classificacio = 'IMPORTANT';\n  reglaActivada = 'Tema contractació pública';\n}\n\n// Regla 4: PDF de Junta de Govern → mínim IMPORTANT\nif (original.font === 'Acords JGL' && original.tipus === 'PDF' && classificacio === 'INFORMATIU') {\n  classificacio = 'IMPORTANT';\n  reglaActivada = 'PDF Junta de Govern Local';\n}\n\nif (reglaActivada) {\n  console.log(`[REGLA FIXA] ${urgenciaIA} → ${classificacio} (${reglaActivada}): ${titolIA?.slice(0,60)}`);\n}\n\n// ─── Confiança final (la més baixa entre IA i base) ──────────────────────\nconst NIVELLS       = { 'ALTA': 3, 'MITJA': 2, 'BAIXA': 1 };\nconst nivellFinal   = Math.min(NIVELLS[confiancaIA] || 2, NIVELLS[original.confianca_base] || 2);\nconst confianca     = Object.keys(NIVELLS).find(k => NIVELLS[k] === nivellFinal) || 'MITJA';\n\n// ─── Inferir tipus_document ───────────────────────────────────────────────\nconst TIPOS_MAP = {\n  'contractació': 'contracte', 'licitació': 'licitació',\n  'adjudicació': 'adjudicació', 'urbanisme': 'edicte',\n  'pressupost': 'acord', 'personal': 'acord',\n};\nconst tipusDocument = TIPOS_MAP[temaIA.toLowerCase()] || (original.tipus === 'PDF' ? 'acord' : 'edicte');\n\n// ─── Alerta individual (per a Telegram urgent) ────────────────────────────\nconst esAlertaIndividual = classificacio === 'URGENT'\n  || (importDetectat !== null && importDetectat > 100_000)\n  || calExpedient;\n\nconsole.log(`[PROCESSAT] ${classificacio} | ${confianca} | ${titolIA?.slice(0,50)}`);\n\nreturn {\n  json: {\n    // Camps BD Supabase\n    url_original:            original.url_original,\n    font:                    original.font,\n    tipus:                   original.tipus,\n    tipus_document:          tipusDocument,\n    titol:                   (titolIA || original.titol_provisional).slice(0, 500),\n    contingut_complet:       original.contingut_complet,\n    resum:                   resumIA.slice(0, 2000),\n    classificacio:           classificacio,\n    nivell_confianca:        confianca,\n    data_deteccio:           new Date().toISOString(),\n    venciment:               venciment,\n    import_detectat:         importDetectat,\n    tema_principal:          temaIA.toLowerCase().slice(0, 50),\n    proposta_accio:          proposta ? proposta.slice(0, 1000) : null,\n    pregunta_ple_suggerida:  pregunta ? pregunta.slice(0, 1000) : null,\n    requereix_revisio_manual: original.requereix_revisio || confianca === 'BAIXA',\n    estat_seguiment:         'pendent',\n    observacions:            null,\n    estat:                   'nou',\n    // Metadades per a missatgeria (no van a BD)\n    _alerta_individual:      esAlertaIndividual,\n    _regla_activada:         reglaActivada,\n    _cal_expedient:          calExpedient,\n  }\n};"
+      }
+    },
+    {
+      "id": "node-015",
+      "name": "HTTP - INSERT a Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3080, 100],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/monitoratge",
+        "responseFormat": "json",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({\n  url_original:            $json.url_original,\n  font:                    $json.font,\n  tipus:                   $json.tipus,\n  tipus_document:          $json.tipus_document,\n  titol:                   $json.titol,\n  contingut_complet:       $json.contingut_complet,\n  resum:                   $json.resum,\n  classificacio:           $json.classificacio,\n  nivell_confianca:        $json.nivell_confianca,\n  venciment:               $json.venciment,\n  import_detectat:         $json.import_detectat,\n  tema_principal:          $json.tema_principal,\n  proposta_accio:          $json.proposta_accio,\n  pregunta_ple_suggerida:  $json.pregunta_ple_suggerida,\n  requereix_revisio_manual: $json.requereix_revisio_manual,\n  estat_seguiment:         'pendent',\n  estat:                   'nou',\n  observacions:            null\n}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=minimal,resolution=ignore-duplicates" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-016",
+      "name": "HTTP - Append a Google Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3080, 280],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $env.GOOGLE_SHEET_ID }}/values/A:M:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        "responseFormat": "json",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({\n  values: [[\n    new Date().toISOString().slice(0,10),\n    $('Code - Parseja IA i aplica regles').item.json.titol,\n    $('Code - Parseja IA i aplica regles').item.json.font,\n    $('Code - Parseja IA i aplica regles').item.json.classificacio,\n    $('Code - Parseja IA i aplica regles').item.json.resum,\n    $('Code - Parseja IA i aplica regles').item.json.tema_principal,\n    $('Code - Parseja IA i aplica regles').item.json.nivell_confianca,\n    $('Code - Parseja IA i aplica regles').item.json.import_detectat || '',\n    $('Code - Parseja IA i aplica regles').item.json.venciment || '',\n    $('Code - Parseja IA i aplica regles').item.json.proposta_accio || '',\n    $('Code - Parseja IA i aplica regles').item.json.pregunta_ple_suggerida || '',\n    $('Code - Parseja IA i aplica regles').item.json.url_original,\n    $('Code - Parseja IA i aplica regles').item.json._regla_activada || ''\n  ]]\n}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_ACCESS_TOKEN }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-017",
+      "name": "Loop - Torna al batxiller",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3320, 180],
+      "parameters": {}
+    },
+    {
+      "id": "node-018",
+      "name": "Code - Construeix missatge final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1880, 560],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "/* Agrega tots els resultats del loop i construeix:\n   - Missatge Telegram (MarkdownV2, agrupat per urgència)\n   - Correu HTML (formatat, tots els detalls) */\n\n// Recopila tots els items processats durant el loop\nlet totsElsItems;\ntry {\n  totsElsItems = $('Code - Parseja IA i aplica regles').all();\n} catch {\n  totsElsItems = items; // Fallback\n}\n\nconst novetats = totsElsItems\n  .map(i => i.json)\n  .filter(r => r?.titol && r?.url_original && !r?._cap_novetat)\n  .sort((a, b) => {\n    const ordre = { URGENT: 0, IMPORTANT: 1, INFORMATIU: 2 };\n    return (ordre[a.classificacio] ?? 3) - (ordre[b.classificacio] ?? 3);\n  });\n\nif (novetats.length === 0) {\n  return [{ json: { total: 0, missatgeTelegram: '', missatgeEmail: '', novetats: [], alertesIndividuals: [] } }];\n}\n\nconst ara     = new Date();\nconst torn    = ara.getHours() < 14 ? 'matí' : 'tarda';\n\nconst DIES    = ['Diumenge','Dilluns','Dimarts','Dimecres','Dijous','Divendres','Dissabte'];\nconst MESOS   = ['gener','febrer','març','abril','maig','juny','juliol','agost','setembre','octubre','novembre','desembre'];\nconst dataStr = `${DIES[ara.getDay()]}, ${ara.getDate()} de ${MESOS[ara.getMonth()]} del ${ara.getFullYear()}`;\n\nconst EMOJI   = { URGENT: '🔴', IMPORTANT: '🟡', INFORMATIU: '🟢' };\nconst CONF    = { ALTA: '✅', MITJA: '⚠️', BAIXA: '❌' };\nconst COLORS  = { URGENT: '#f87171', IMPORTANT: '#fbbf24', INFORMATIU: '#4ade80' };\n\n// ─── TELEGRAM MarkdownV2 ─────────────────────────────────────────────────\nfunction esc(t) {\n  return String(t || '').replace(/([_*\\[\\]()~`>#+\\-=|{}.!])/g, '\\\\$1');\n}\n\nlet tg = `*🏛 Monitor Polític — ${esc(dataStr)} \\\\(${torn}\\\\)*\\n`;\ntg    += `*${esc(novetats.length.toString())} novetats detectades*\\n`;\ntg    += `${esc('─'.repeat(28))}\\n\\n`;\n\nfor (const n of novetats.slice(0, 10)) {\n  const venc = n.venciment ? `\\n⏰ *Venciment: ${esc(n.venciment)}*` : '';\n  const imp  = n.import_detectat ? `\\n💶 Import: *${esc(n.import_detectat.toLocaleString('ca-ES'))} €*` : '';\n  tg += `${EMOJI[n.classificacio] || '⚪'} *${esc(n.titol.slice(0,80))}*\\n`;\n  tg += `📂 ${esc(n.font)} · ${esc(n.tema_principal || '')}${venc}${imp}\\n`;\n  tg += `${CONF[n.nivell_confianca] || ''} _${esc(n.resum.slice(0,200))}_\\n`;\n  if (n.proposta_accio) tg += `💡 _${esc(n.proposta_accio.slice(0,120))}_\\n`;\n  tg += `🔗 [Veure el document](${n.url_original})\\n\\n`;\n}\n\nif (novetats.length > 10) {\n  tg += `\\n_\\\\+${novetats.length - 10} novetats addicionals al dashboard_\\n`;\n}\n\n// ─── EMAIL HTML ──────────────────────────────────────────────────────────\nconst GREEN = '#4ade80';\n\nlet email = `<!DOCTYPE html><html lang=\"ca\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width\"></head>\n<body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#0c0e14;color:#f0f2f8;padding:24px;margin:0;\">\n<div style=\"max-width:680px;margin:0 auto;\">\n  <div style=\"border-bottom:2px solid #4ade80;padding-bottom:16px;margin-bottom:24px;\">\n    <h1 style=\"font-size:1.375rem;font-weight:700;margin:0 0 4px;\">🏛 Monitor Polític Municipal</h1>\n    <p style=\"color:#8891a8;margin:0;font-size:0.875rem;\">${dataStr} · ${torn} · ${novetats.length} novetats</p>\n  </div>`;\n\nfor (const n of novetats) {\n  const col  = COLORS[n.classificacio] || '#8891a8';\n  email += `<div style=\"border:1px solid ${col}33;border-left:4px solid ${col};border-radius:10px;padding:18px;margin-bottom:16px;background:#161924;\">`;\n  email += `  <div style=\"display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;\">`;\n  email += `    <span style=\"background:${col}22;color:${col};padding:3px 10px;border-radius:4px;font-size:0.75rem;font-weight:700;letter-spacing:0.04em;\">${n.classificacio}</span>`;\n  email += `    <span style=\"color:#525c72;font-size:0.75rem;\">${n.font} · ${n.tema_principal || ''}</span>`;\n  if (n.nivell_confianca === 'BAIXA') email += `    <span style=\"color:#f87171;font-size:0.7rem;\">⚠️ Confiança ${n.nivell_confianca}</span>`;\n  email += `  </div>`;\n  email += `  <h2 style=\"font-size:0.9375rem;font-weight:700;margin:0 0 8px;line-height:1.4;\">${n.titol}</h2>`;\n  email += `  <p style=\"font-size:0.875rem;color:#b0b8cc;margin:0 0 10px;line-height:1.6;\">${n.resum}</p>`;\n  if (n.import_detectat) email += `  <p style=\"color:${GREEN};font-size:0.8125rem;margin:0 0 6px;\">💶 <strong>${n.import_detectat.toLocaleString('ca-ES')} €</strong></p>`;\n  if (n.venciment) email += `  <p style=\"color:#f87171;font-size:0.8125rem;margin:0 0 6px;\">⏰ Venciment: <strong>${n.venciment}</strong></p>`;\n  if (n.proposta_accio) email += `  <div style=\"border-top:1px solid #2a2f3d;margin-top:10px;padding-top:10px;\"><p style=\"color:#8891a8;font-size:0.8125rem;margin:0;\">💡 ${n.proposta_accio}</p></div>`;\n  if (n.pregunta_ple_suggerida) email += `  <p style=\"color:#60a5fa;font-size:0.8125rem;margin:6px 0 0;\">❓ <em>${n.pregunta_ple_suggerida}</em></p>`;\n  email += `  <a href=\"${n.url_original}\" style=\"display:inline-block;margin-top:12px;color:${GREEN};font-size:0.8125rem;text-decoration:none;\">Veure document original →</a>`;\n  email += `</div>`;\n}\n\nemail += `<p style=\"color:#525c72;font-size:0.7rem;margin-top:24px;padding-top:12px;border-top:1px solid #2a2f3d;\">\n  Monitor Polític Municipal · Castell-Platja d'Aro · v2.1 · Generat automàticament el ${ara.toLocaleString('ca-ES')}<br/>\n  Per a ús intern del regidor de l'oposició. No distribuir.\n</p></div></body></html>`;\n\n// ─── Alertes individuals Telegram ─────────────────────────────────────────\nconst alertesIndividuals = novetats.filter(n => n._alerta_individual);\n\nreturn [{\n  json: {\n    total:              novetats.length,\n    urgents:            novetats.filter(n => n.classificacio === 'URGENT').length,\n    missatgeTelegram:   tg,\n    missatgeEmail:      email,\n    asumpteEmail:       `🏛 Monitor Polític [${ara.toLocaleDateString('ca-ES')}] — ${novetats.length} novetats (${torn})`,\n    alertesIndividuals: alertesIndividuals.map(n => ({\n      titol:    n.titol.slice(0, 100),\n      resum:    n.resum.slice(0, 200),\n      url:      n.url_original,\n      venciment: n.venciment,\n      import:   n.import_detectat,\n      classificacio: n.classificacio,\n    })),\n    novetats,\n  }\n}];"
+      }
+    },
+    {
+      "id": "node-019",
+      "name": "IF - Enviar notificacions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2120, 560],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-total",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-020",
+      "name": "Telegram - Resum agrupat",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2360, 460],
+      "continueOnFail": true,
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.missatgeTelegram }}",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "id": "node-021",
+      "name": "IF - Hi ha alertes urgents?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2360, 640],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-urgents",
+              "leftValue": "={{ $json.alertesIndividuals.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "node-022",
+      "name": "Telegram - Alerta URGENT individual",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2600, 540],
+      "continueOnFail": true,
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚨 *ALERTA URGENT* 🚨\n\n{{ $json.alertesIndividuals.map(a => {\n  const esc = t => String(t||'').replace(/([_*\\[\\]()~`>#+\\-=|{}.!])/g, '\\\\\\\\$1');\n  const venc = a.venciment ? `⏰ Venciment: *${esc(a.venciment)}*\\n` : '';\n  const imp = a.import ? `💶 *${esc(a.import.toLocaleString('ca-ES'))} €*\\n` : '';\n  return `${a.classificacio==='URGENT'?'🔴':'🟡'} *${esc(a.titol)}*\\n${venc}${imp}_${esc(a.resum)}_\\n🔗 ${a.url}`;\n}).join('\\n\\n') }}",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2",
+          "disable_notification": false
+        }
+      },
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "id": "node-023",
+      "name": "Email - Resum complet",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2600, 720],
+      "continueOnFail": true,
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM }}",
+        "toEmail": "={{ $env.EMAIL_REGIDOR }}",
+        "subject": "={{ $json.asumpteEmail }}",
+        "emailType": "html",
+        "message": "={{ $json.missatgeEmail }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": { "id": "SMTP_CREDENTIAL_ID", "name": "SMTP Gmail" }
+      }
+    },
+    {
+      "id": "node-024",
+      "name": "No hi ha novetats - FI",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2120, 720],
+      "parameters": {}
+    }
+  ],
+
+  "connections": {
+    "Trigger Diari 8h i 20h": {
+      "main": [[
+        { "node": "HTTP - Acords JGL",        "type": "main", "index": 0 },
+        { "node": "HTTP - E-tauler",           "type": "main", "index": 0 },
+        { "node": "HTTP - Perfil Contractant", "type": "main", "index": 0 }
+      ]]
+    },
+    "HTTP - Acords JGL":        { "main": [[{ "node": "Merge - Espera 3 fonts", "type": "main", "index": 0 }]] },
+    "HTTP - E-tauler API":      { "main": [[{ "node": "Merge - Espera 3 fonts", "type": "main", "index": 1 }]] },
+    "HTTP - OpenData Contractació":{ "main": [[{ "node": "Merge - Espera 3 fonts", "type": "main", "index": 2 }]] },
+    "Merge - Espera 3 fonts":          { "main": [[{ "node": "Code - Extreu tots els links",           "type": "main", "index": 0 }]] },
+    "Code - Extreu tots els links":    { "main": [[{ "node": "HTTP - Obte URLs existents (Supabase)",  "type": "main", "index": 0 }]] },
+    "HTTP - Obte URLs existents (Supabase)": { "main": [[{ "node": "Code - Filtra URLs noves",         "type": "main", "index": 0 }]] },
+    "Code - Filtra URLs noves":        { "main": [[{ "node": "IF - Hi ha novetats?",                   "type": "main", "index": 0 }]] },
+    "IF - Hi ha novetats?": {
+      "main": [
+        [{ "node": "Loop - Processa cada URL",  "type": "main", "index": 0 }],
+        [{ "node": "No hi ha novetats - FI",     "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop - Processa cada URL": {
+      "main": [
+        [{ "node": "HTTP - Fetch contingut complet", "type": "main", "index": 0 }],
+        [{ "node": "Code - Construeix missatge final", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP - Fetch contingut complet":  { "main": [[{ "node": "Code - Prepara contingut per a IA",   "type": "main", "index": 0 }]] },
+    "Code - Prepara contingut per a IA": { "main": [[{ "node": "OpenAI - Analitza i classifica",    "type": "main", "index": 0 }]] },
+    "OpenAI - Analitza i classifica":  { "main": [[{ "node": "Code - Parseja IA i aplica regles",   "type": "main", "index": 0 }]] },
+    "Code - Parseja IA i aplica regles": {
+      "main": [[
+        { "node": "HTTP - INSERT a Supabase",     "type": "main", "index": 0 },
+        { "node": "HTTP - Append a Google Sheets","type": "main", "index": 0 }
+      ]]
+    },
+    "HTTP - INSERT a Supabase":       { "main": [[{ "node": "Loop - Torna al batxiller", "type": "main", "index": 0 }]] },
+    "HTTP - Append a Google Sheets":  { "main": [[{ "node": "Loop - Torna al batxiller", "type": "main", "index": 1 }]] },
+    "Loop - Torna al batxiller":      { "main": [[{ "node": "Loop - Processa cada URL",  "type": "main", "index": 0 }]] },
+    "Code - Construeix missatge final": { "main": [[{ "node": "IF - Enviar notificacions?", "type": "main", "index": 0 }]] },
+    "IF - Enviar notificacions?": {
+      "main": [
+        [
+          { "node": "Telegram - Resum agrupat",    "type": "main", "index": 0 },
+          { "node": "IF - Hi ha alertes urgents?", "type": "main", "index": 0 }
+        ],
+        [{ "node": "No hi ha novetats - FI",       "type": "main", "index": 0 }]
+      ]
+    },
+    "IF - Hi ha alertes urgents?": {
+      "main": [
+        [{ "node": "Telegram - Alerta URGENT individual", "type": "main", "index": 0 }],
+        [{ "node": "Email - Resum complet",               "type": "main", "index": 0 }]
+      ]
+    },
+    "Telegram - Alerta URGENT individual": { "main": [[{ "node": "Email - Resum complet", "type": "main", "index": 0 }]] }
+  },
+
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "monitor-politic-v2-1-fixed",
+  "meta": { "templateId": "monitor-politic-castellplatjadaro-v2" },
+  "id": "monitor-politic-municipal-v21",
+  "tags": [
+    { "name": "Monitor Polític" },
+    { "name": "Municipal" },
+    { "name": "Automatització" }
+  ]
+}

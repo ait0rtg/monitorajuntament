@@ -1,0 +1,125 @@
+{
+  "name": "Monitor Polític Municipal — v5",
+  "nodes": [
+    {
+      "id": "node-1", "name": "Trigger Matí", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0],
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }] }, "timezone": "Europe/Madrid" }
+    },
+    {
+      "id": "node-2", "name": "Trigger Tarda", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 200],
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 20 * * *" }] }, "timezone": "Europe/Madrid" }
+    },
+    {
+      "id": "node-3", "name": "E-tauler RSS", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [200, 0],
+      "parameters": { "method": "GET", "url": "https://tauler.seu-e.cat/rss?idEns=1704860009", "responseFormat": "text" }
+    },
+    {
+      "id": "node-4", "name": "Contractant API", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [200, 200],
+      "parameters": { "method": "GET", "url": "https://analisi.transparenciacatalunya.cat/resource/ybgg-dgi6.json?$where=nom_organ_contractacio=%27Ajuntament%20de%20Castell-Platja%20d%27Aro%27&$order=data_publicacio%20DESC&$limit=20", "responseFormat": "json" }
+    },
+    {
+      "id": "node-5", "name": "Acords JGL", "type": "n8n-nodes-puppeteer.puppeteer", "typeVersion": 1.0, "position": [200, 400],
+      "parameters": { "url": "https://ciutada.platjadaro.com/ajuntament/organitzacio-municipal/junta-de-govern/acords-de-junta-de-govern/", "waitUntil": "networkidle2", "extractMode": "allPdfs", "queryParameters": "", "actions": [] }
+    },
+    {
+      "id": "node-6", "name": "Merge Fonts", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [400, 200],
+      "parameters": { "mode": "append" }
+    },
+    {
+      "id": "node-7", "name": "Normalitza i Filtra", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [600, 200],
+      "parameters": { "jsCode": "const results = [];\nconst seenUrls = new Set();\nfor (const item of $input.all()) {\n  const json = item.json;\n  let normalized = null;\n  \n  if (json.rss?.channel?.item) {\n     const items = Array.isArray(json.rss.channel.item) ? json.rss.channel.item : [json.rss.channel.item];\n     items.forEach(i => results.push({ json: { url: i.link, titol: i.title, font: 'E-tauler Anuncis', tipus: 'edicte', esOficial: true, data_publicacio: i.pubDate } }));\n  } else if (json.data_publicacio && json.nom_organ_contractacio) {\n     results.push({ json: { url: json.enllac_al_perfil_del_contractant || json.url || 'http', titol: json.objecte_del_contracte, font: 'Perfil Contractant', tipus: 'licitació', esOficial: true, data_publicacio: json.data_publicacio, import_detectat: json.valor_estimat_del_contracte, tipus_tramit: json.tipus_tramit } });\n  } else if (json.url?.includes('.pdf')) {\n     results.push({ json: { url: json.url, titol: json.url.split('/').pop(), font: 'Acords Junta Govern', tipus: 'PDF', esOficial: true } });\n  }\n}\n\nconst dedup = results.filter(i => {\n  if (!i.json.url) return false;\n  if (seenUrls.has(i.json.url)) return false;\n  seenUrls.add(i.json.url);\n  return true;\n});\nreturn dedup;" }
+    },
+    {
+      "id": "node-8", "name": "Consulta Supabase", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [800, 200],
+      "parameters": { "method": "GET", "url": "={{ $env.SUPABASE_URL }}/rest/v1/monitoratge?select=url_original&limit=5000", "responseFormat": "json", "sendHeaders": true, "headerParameters": { "parameters": [{"name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}"},{"name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"}] } }
+    },
+    {
+      "id": "node-9", "name": "Filtra Nous", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1000, 200],
+      "parameters": { "jsCode": "const existing = new Set($input.all()[0].json.map(r => r.url_original));\ntry {\n  let candidates = $('Normalitza i Filtra').all();\n  let news = candidates.filter(i => !existing.has(i.json.url));\n  news.sort((a,b) => (a.json.tipus === 'PDF' ? -1 : 1));\n  return news.slice(0, 15);\n} catch (e) { return []; }" }
+    },
+    {
+      "id": "node-10", "name": "Content Fetching", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1200, 200],
+      "parameters": { "method": "GET", "url": "={{ $json.url }}", "responseFormat": "text", "options": { "timeout": 25000 } }
+    },
+    {
+      "id": "node-11", "name": "Extreu Text", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1400, 200],
+      "parameters": { "jsCode": "const html = $json.data || $json.body || '';\nlet txt = html.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\\s{2,}/g, ' ').trim();\nconst loopJson = $('Filtra Nous').item.json;\nreturn { json: { ...loopJson, contingut_complet: txt.slice(0, 6000), confianca: txt.length < 50 ? 'BAIXA' : 'ALTA' } };" }
+    },
+    {
+      "id": "node-12", "name": "Analitza amb IA", "type": "n8n-nodes-base.openAi", "typeVersion": 1.5, "position": [1600, 200],
+      "parameters": {
+        "resource": "chat", "operation": "complete",
+        "modelId": { "__rl": true, "value": "gpt-4o-mini", "mode": "list", "cachedResultName": "gpt-4o-mini" },
+        "messages": { "values": [
+          { "role": "system", "content": "Ets l'assistent d'un regidor de l'oposició de Castell-Platja d'Aro. Basa't EXCLUSIVAMENT en el text. Respon en català." },
+          { "role": "user", "content": "FONT: {{ $json.font }}\\nTITOL: {{ $json.titol }}\\nTIPUS: {{ $json.tipus }}\\nTEXT: {{ $json.contingut_complet }}\\n\\nRespond EXACTLY:\\nURGENCIA: [URGENT/IMPORTANT/INFORMATIU]\\nRESUM: [3-4 lines from text only]\\nVENCIMENT: [DD/MM/YYYY or No detectat]\\nIMPORT: [amount in euros or No detectat]\\nTEMA: [urbanisme/contractacio/personal/serveis/pressupost/altres]\\nTIPUS_TRAM: [llicencia/denuncia/contracte/subvencio/decret/acord/altres]\\nCONFIANCA: [ALTA/MITJA/BAIXA]\\nPER A L'OPOSICIO: [one fact-based sentence]\\nPROPOSTA ACCIO: [optional]\\nPREGUNTA PLE: [optional]\\nEXPEDIENT: [optional]" }
+        ]},
+        "options": { "maxTokens": 600 }
+      }
+    },
+    {
+      "id": "node-13", "name": "Aplica Regles Urgencia", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1800, 200],
+      "parameters": { "jsCode": "const ia = $json.message?.content || '';\nconst original = $('Extreu Text').item.json;\nlet res = {};\n['URGENCIA', 'RESUM', 'VENCIMENT', 'IMPORT', 'TEMA', 'TIPUS_TRAM', 'CONFIANCA', 'PER A L\\'OPOSICIO', 'PROPOSTA ACCIO', 'PREGUNTA PLE', 'EXPEDIENT'].forEach(k => {\n  const m = ia.match(new RegExp('^' + k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + ':\\\\s*(.*)$', 'm'));\n  res[k.toLowerCase().replace(/[^a-z0-9]/g, '_')] = m ? m[1].trim() : '';\n});\n\nlet urg = res.urgencia || 'INFORMATIU';\nconst amt = parseFloat(res.import?.replace(/[^0-9.]/g,''));\nconst days = res.venciment ? (new Date(res.venciment.split('/').reverse().join('-')) - new Date())/86400000 : 999;\nif (days > 0 && days < 15) urg = 'URGENT';\nif (!isNaN(amt) && amt > 50000 && urg !== 'URGENT') urg = 'IMPORTANT';\nif (original.font.includes('Contractant') && urg === 'INFORMATIU') urg = 'IMPORTANT';\nif (original.tipus === 'PDF' && original.font.includes('Acords') && urg === 'INFORMATIU') urg = 'IMPORTANT';\n\nreturn { json: { ...original, ...res, final_urgencia: urg, num_import: isNaN(amt) ? null : amt, sql_venciment: days < 999 ? res.venciment.split('/').reverse().join('-') : null } };" }
+    },
+    {
+      "id": "node-14", "name": "Guarda Supabase", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2000, 200],
+      "parameters": {
+         "method": "POST", "url": "={{ $env.SUPABASE_URL }}/rest/v1/monitoratge", "sendBody": true, "contentType": "json",
+         "jsonBody": "={{ JSON.stringify({\n url_original: $json.url,\n font: $json.font,\n tipus: $json.tipus,\n tipus_document: $json.tipus_tram,\n tipus_tramit: $json.tipus_tram,\n titol: $json.titol,\n contingut_complet: $json.contingut_complet,\n resum: $json.resum,\n classificacio: $json.final_urgencia,\n nivell_confianca: $json.confianca === 'No detectat' ? 'BAIXA' : $json.confianca,\n venciment: $json.sql_venciment,\n import_detectat: $json.num_import,\n tema_principal: $json.tema,\n proposta_accio: $json.proposta_accio,\n pregunta_ple_suggerida: $json.pregunta_ple,\n estat_seguiment: 'pendent',\n estat: 'nou'\n}) }}",
+         "sendHeaders": true, "headerParameters": { "parameters": [{"name":"apikey", "value":"={{ $env.SUPABASE_SERVICE_KEY }}"},{"name":"Authorization", "value":"=Bearer {{ $env.SUPABASE_SERVICE_KEY }}"},{"name":"Prefer", "value":"return=minimal,resolution=ignore-duplicates"}] }
+      }
+    },
+    {
+      "id": "node-15", "name": "Guarda Sheets", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2000, 400],
+      "parameters": { "method": "POST", "url": "https://webhook.site/placeholder-for-sheets", "responseFormat": "text" }
+    },
+    {
+      "id": "node-16", "name": "Construeix Missatge", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2200, 200],
+      "parameters": { "jsCode": "const all = $('Aplica Regles Urgencia').all().map(i => i.json);\nconst num = all.length;\nconst urgs = all.filter(i => i.final_urgencia === 'URGENT');\nlet tg = '*Resum diari*\\n\\n';\nall.forEach(a => tg += `- ${a.titol}\\n`);\nreturn { json: { hiHaNovetats: num > 0, hiHaUrgents: urgs.length > 0, missatge: tg, htmlBody: '<b>Resum html</b>', urgents: urgs, emailSubject: 'Resum ' + num } };" }
+    },
+    {
+      "id": "node-17", "name": "IF Hi ha novetats", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [2400, 200],
+      "parameters": { "conditions": { "conditions": [{ "leftValue": "={{ $json.hiHaNovetats }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equal" } }] } }
+    },
+    {
+      "id": "node-18", "name": "Telegram Resum", "type": "n8n-nodes-base.telegram", "typeVersion": 1.2, "position": [2600, 100],
+      "parameters": { "chatId": "={{ $env.TELEGRAM_CHAT_ID }}", "text": "={{ $json.missatge }}", "additionalFields": { "parse_mode": "MarkdownV2" } }
+    },
+    {
+      "id": "node-19", "name": "Gmail Email Resum", "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1, "position": [2600, 300],
+      "parameters": { "toEmail": "={{ $env.EMAIL_DESTINATARI }}", "subject": "={{ $json.emailSubject }}", "emailType": "html", "message": "={{ $json.htmlBody }}" }
+    },
+    {
+      "id": "node-20", "name": "IF Hi ha URGENTS", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [2600, 500],
+      "parameters": { "conditions": { "conditions": [{ "leftValue": "={{ $json.hiHaUrgents }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equal" } }] } }
+    },
+    {
+      "id": "node-21", "name": "Formata Urgents", "type": "n8n-nodes-base.splitInBatches", "typeVersion": 3, "position": [2800, 500],
+      "parameters": { "batchSize": 1 }
+    },
+    {
+      "id": "node-22", "name": "Telegram Alerta Urgent", "type": "n8n-nodes-base.telegram", "typeVersion": 1.2, "position": [3000, 500],
+      "parameters": { "chatId": "={{ $env.TELEGRAM_CHAT_ID }}", "text": "🚨 URGENT" }
+    }
+  ],
+  "connections": {
+    "Trigger Matí": { "main": [[ { "node": "E-tauler RSS", "type": "main", "index": 0 }, { "node": "Contractant API", "type": "main", "index": 0 }, { "node": "Acords JGL", "type": "main", "index": 0 } ]] },
+    "Trigger Tarda": { "main": [[ { "node": "E-tauler RSS", "type": "main", "index": 0 }, { "node": "Contractant API", "type": "main", "index": 0 }, { "node": "Acords JGL", "type": "main", "index": 0 } ]] },
+    "E-tauler RSS": { "main": [[ { "node": "Merge Fonts", "type": "main", "index": 0 } ]] },
+    "Contractant API": { "main": [[ { "node": "Merge Fonts", "type": "main", "index": 1 } ]] },
+    "Acords JGL": { "main": [[ { "node": "Merge Fonts", "type": "main", "index": 2 } ]] },
+    "Merge Fonts": { "main": [[ { "node": "Normalitza i Filtra", "type": "main", "index": 0 } ]] },
+    "Normalitza i Filtra": { "main": [[ { "node": "Consulta Supabase", "type": "main", "index": 0 } ]] },
+    "Consulta Supabase": { "main": [[ { "node": "Filtra Nous", "type": "main", "index": 0 } ]] },
+    "Filtra Nous": { "main": [[ { "node": "Content Fetching", "type": "main", "index": 0 } ]] },
+    "Content Fetching": { "main": [[ { "node": "Extreu Text", "type": "main", "index": 0 } ]] },
+    "Extreu Text": { "main": [[ { "node": "Analitza amb IA", "type": "main", "index": 0 } ]] },
+    "Analitza amb IA": { "main": [[ { "node": "Aplica Regles Urgencia", "type": "main", "index": 0 } ]] },
+    "Aplica Regles Urgencia": { "main": [[ { "node": "Guarda Supabase", "type": "main", "index": 0 }, { "node": "Guarda Sheets", "type": "main", "index": 0 } ]] },
+    "Guarda Supabase": { "main": [[ { "node": "Construeix Missatge", "type": "main", "index": 0 } ]] },
+    "Construeix Missatge": { "main": [[ { "node": "IF Hi ha novetats", "type": "main", "index": 0 } ]] },
+    "IF Hi ha novetats": { "main": [[ { "node": "Telegram Resum", "type": "main", "index": 0 }, { "node": "Gmail Email Resum", "type": "main", "index": 0 }, { "node": "IF Hi ha URGENTS", "type": "main", "index": 0 } ]] },
+    "IF Hi ha URGENTS": { "main": [[ { "node": "Formata Urgents", "type": "main", "index": 0 } ]] },
+    "Formata Urgents": { "main": [[ { "node": "Telegram Alerta Urgent", "type": "main", "index": 0 } ]] }
+  }
+}
